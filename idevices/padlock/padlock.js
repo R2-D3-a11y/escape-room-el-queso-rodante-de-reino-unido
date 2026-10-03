@@ -1,0 +1,581 @@
+/* eslint-disable no-undef */
+/**
+ * Lock iDevice (export code)
+ * Released under Attribution-ShareAlike 4.0 International License.
+ * Author: Manuel Narváez Martínez
+ * Graphic design: Ana María Zamora Moreno, Francisco Javier Pulido
+ * License: http://creativecommons.org/licenses/by-sa/4.0/
+ */
+var $padlock = {
+    idevicePath: '',
+    borderColors: {
+        black: '#1c1b1b',
+        blue: '#5877c6',
+        green: '#2a9315',
+        red: '#ff0000',
+        white: '#ffffff',
+        yellow: '#f3d55a',
+    },
+    colors: {
+        black: '#1c1b1b',
+        blue: '#d5dcec',
+        green: '#cce1c8',
+        red: '#f7c4c4',
+        white: '#ffffff',
+        yellow: '#f5efd6',
+    },
+    image: '',
+    options: {},
+    msgs: '',
+    hasSCORMbutton: false,
+    isInExe: false,
+    userName: '',
+    previousScore: '',
+    initialScore: '',
+    scormAPIwrapper: 'libs/SCORM_API_wrapper.js',
+    scormFunctions: 'libs/SCOFunctions.js',
+    mScorm: null,
+
+    init: function () {
+        $exeDevices.iDevice.gamification.initGame(
+            this,
+            'Padlock',
+            'padlock',
+            'candado-IDevice'
+        );
+    },
+
+    enable: function () {
+        $padlock.loadGame();
+    },
+
+    loadGame: function () {
+        $padlock.options = [];
+        $padlock.activities.each(function (i) {
+            const dl = $('.candado-DataGame', this);
+            if (dl.length === 0) return; // Skip already initialized activities
+            const version = $('.candado-version', this).eq(0).text(),
+                mOption = $padlock.loadDataGame(dl, version),
+                msg = mOption.msgs.msgPlayStart;
+
+            mOption.candadoInstructions = $('.candado-instructions', this)
+                .eq(0)
+                .html();
+            mOption.counter = mOption.candadoTime * 60;
+            mOption.candadoStarted = false;
+            mOption.candadoSolved = false;
+            mOption.candadoErrors = 0;
+
+            mOption.id = typeof mOption.id === 'undefined' ? i : mOption.id;
+            $padlock.options.push(mOption);
+
+            mOption.scorerp = 0;
+            mOption.idevicePath = $padlock.idevicePath;
+            mOption.main = 'candadoMainContainer-' + i;
+            mOption.idevice = 'candado-IDevice';
+
+            const candado = $padlock.createInterfaceCandado(i);
+            dl.before(candado).remove();
+
+            $('#candadoGameMinimize-' + i).hide();
+            $('#candadoGameContainer-' + i).hide();
+
+            if (mOption.candadoShowMinimize) {
+                $('#candadoGameMinimize-' + i)
+                    .css('cursor', 'pointer')
+                    .show();
+            } else {
+                $('#candadoGameContainer-' + i).show();
+            }
+
+            $('#candadoMessageMaximize-' + i).text(msg);
+
+            $('#candadoInstructions-' + i).append(
+                $('.candado-instructions', this)
+            );
+            $('#candadoFeedRetro-' + i).append($('.candado-retro', this));
+            $('#candadoMainContainer-' + i)
+                .find('.candado-instructions')
+                .removeClass('js-hidden');
+            $('#candadoMainContainer-' + i)
+                .find('.candado-retro')
+                .removeClass('js-hidden');
+            $padlock.addEvents(i);
+            $('#candadoMainContainer-' + i).show();
+        });
+        const candadoHtml = $('.candado-IDevice').html();
+        if ($exeDevices.iDevice.gamification.math.hasLatex(candadoHtml)) {
+            $exeDevices.iDevice.gamification.math.updateLatex(
+                '.candado-IDevice'
+            );
+        }
+    },
+
+    createInterfaceCandado: function (instance) {
+        const path = $padlock.idevicePath,
+            msgs = $padlock.options[instance].msgs,
+            mOptions = $padlock.options[instance],
+            html = `
+        <div class="candado-MainContainer" id="candadoMainContainer-${instance}">
+            <div class="candado-GameMinimize" id="candadoGameMinimize-${instance}">
+                <a href="#" class="candado-LinkMaximize" id="candadoLinkMaximize-${instance}" title="${msgs.msgMaximize}">
+                    <img src="${path}candadoIcon.png" class="candado-Icons candado-IconMinimize candado-Activo" alt="">
+                    <span class="candado-MessageMaximize" id="candadoMessageMaximize-${instance}">${msgs.msgEShowActivity}</span>
+                </a>
+            </div>
+            <div class="candado-GameContainer" id="candadoGameContainer-${instance}">
+                <div class="candado-GameScoreBoard">
+                    <strong id="candadoTimeLabel-${instance}"><span class="sr-av">${msgs.msgTime}:</span></strong>
+                    <div class="exeQuextIcons34-Time" id="candadoTimeIcon-${instance}" title="${msgs.msgTime}"></div>
+                    <p id="candadoPTime-${instance}" class="candado-PTime">00:00</p>
+                    <a href="#" class="candado-LinkMinimize candado-Activo" id="candadoLinkMinimize-${instance}" title="${msgs.msgMinimize}">
+                        <strong><span class="sr-av">${msgs.msgMinimize}:</span></strong>
+                        <div class="exeQuextIcons34-Minimize"></div>
+                    </a>
+                </div>
+                <div class="candado-Instructiones exe-text" id="candadoInstructions-${instance}"></div>
+                <div class="candado-FeedRetro exe-text" id="candadoFeedRetro-${instance}"></div>
+                <div class="candado-MessageInfo" id="candadoMessageInfo-${instance}">
+                    <div class="sr-av">${msgs.msgInstructions}</div>
+                    <p id="candadoPInformation-${instance}"></p>
+                </div>
+                <div class="candado-SolutionDiv" id="candadoSolutionDiv-${instance}">
+                    <label for="candadoSolution-${instance}" class="labelSolution">${msgs.msgCodeAccess}:</label>
+                    <input type="password" class="candado-Solution form-control" id="candadoSolution-${instance}">
+                    <a href="#" id="candadoSolutionButton-${instance}" title="${msgs.msgSubmit}" class="candado-SolutionButton candado-Activo">
+                        <strong><span class="sr-av">${msgs.msgSubmit}</span></strong>
+                        <div class="exeQuextIcons-Submit"></div>
+                    </a>
+                </div>
+                <div class="candado-SolutionDiv" id="candadoNavigator-${instance}">
+                    <input type="button" class="btn btn-primary" id="candadoShowIntro-${instance}" style="margin-right:8px;" value="${msgs.msgInstructions}">
+                    <input type="button" class="btn btn-primary" id="candadoShowRetro-${instance}" value="${msgs.msgFeedback}">
+                </div>
+            </div>
+        </div>
+       ${$exeDevices.iDevice.gamification.scorm.addButtonScoreNew(mOptions, this.isInExe)}
+        `;
+
+        return html;
+    },
+
+    loadDataGame: function (data, version) {
+        let json = data.text();
+        if (version == 1 || !json.startsWith('{')) {
+            json = $exeDevices.iDevice.gamification.helpers.decrypt(json);
+        }
+        const mOptions =
+            $exeDevices.iDevice.gamification.helpers.isJsonString(json);
+        mOptions.score = 0;
+        mOptions.gameStarted = false;
+        return mOptions;
+    },
+
+    addZero: function (i) {
+        return i < 10 ? '0' + i : i;
+    },
+
+    saveCandadoData: function (instance) {
+        const mOptions = $padlock.options[instance],
+            tiempo = mOptions.counter < 0 ? 0 : mOptions.counter,
+            data = {
+                candadoStarted: mOptions.candadoStarted,
+                candadoSolved: mOptions.candadoSolved,
+                counter: tiempo,
+                candadoTime: mOptions.candadoTime,
+                candadoReboot: mOptions.candadoReboot,
+                candadoErrors: mOptions.candadoErrors,
+                candadoScore: mOptions.score,
+            };
+        localStorage.setItem(
+            'dataCandado-' + mOptions.id,
+            JSON.stringify(data)
+        );
+    },
+
+    getCandadoData: function (instance) {
+        const mOptions = $padlock.options[instance];
+        return $exeDevices.iDevice.gamification.helpers.isJsonString(
+            localStorage.getItem('dataCandado-' + mOptions.id)
+        );
+    },
+
+    addEvents: function (instance) {
+        const mOptions = $padlock.options[instance];
+        $padlock.removeEvents(instance);
+
+        $(`#candadoLinkMaximize-${instance}`).on('click', (e) => {
+            e.preventDefault();
+            $(`#candadoGameContainer-${instance}`).show();
+            $(`#candadoGameMinimize-${instance}`).hide();
+            if (!mOptions.candadoStarted) {
+                $padlock.startGame(instance);
+            }
+            $(`#candadoSolution-${instance}`).focus();
+        });
+
+        $(`#candadoLinkMinimize-${instance}`).on('click', (e) => {
+            e.preventDefault();
+            $(`#candadoGameContainer-${instance}`).hide();
+            $(`#candadoGameMinimize-${instance}`)
+                .css('visibility', 'visible')
+                .show();
+        });
+
+        $(`#candadoSolution-${instance}`).on('keydown', (event) => {
+            if (event.which === 13 || event.keyCode === 13) {
+                $padlock.answerActivity(instance);
+                return false;
+            }
+            return true;
+        });
+
+        $(`#candadoSolutionButton-${instance}`).on('click', (e) => {
+            e.preventDefault();
+            $padlock.answerActivity(instance);
+        });
+
+        $(`#candadoShowIntro-${instance}`).on('click', () => {
+            $(`#candadoInstructions-${instance}`).show();
+            $(`#candadoFeedRetro-${instance}`).hide();
+            $(`#candadoSolutionDiv-${instance}`).hide();
+        });
+
+        $(`#candadoShowRetro-${instance}`).on('click', () => {
+            $(`#candadoInstructions-${instance}`).hide();
+            $(`#candadoFeedRetro-${instance}`).show();
+            $(`#candadoSolutionDiv-${instance}`).hide();
+        });
+
+        $(`#candadoMessageInfo-${instance}`).show();
+        $(`#candadoNavigator-${instance}`).hide();
+
+        if (mOptions.candadoShowMinimize) {
+            $(`#candadoGameContainer-${instance}`).hide();
+            $(`#candadoGameMinimize-${instance}`)
+                .css('visibility', 'visible')
+                .show();
+        }
+
+        // An untimed padlock has no countdown — startGame() returns before
+        // setting the interval — so the board must not show a clock icon and a
+        // 00:00 that will never move. The label goes with them, or a screen
+        // reader announces "Time:" over nothing.
+        //
+        // This used to hide candadoTimeQuestion and candadoTimeNumber, ids the
+        // export markup has never had, so it did nothing at all.
+        if (mOptions.candadoTime === 0) {
+            $(`#candadoTimeLabel-${instance}`).hide();
+            $(`#candadoTimeIcon-${instance}`).hide();
+            $(`#candadoPTime-${instance}`).hide();
+        }
+
+        const dataCandado = $padlock.getCandadoData(instance);
+        mOptions.candadoSolved = false;
+        mOptions.counter = mOptions.candadoTime * 60;
+
+        if (dataCandado) {
+            if (
+                mOptions.candadoTime !== dataCandado.candadoTime ||
+                mOptions.candadoReboot !== dataCandado.candadoReboot ||
+                (mOptions.candadoReboot && dataCandado.candadoSolved)
+            ) {
+                mOptions.score = 0;
+                localStorage.removeItem(`dataCandado-${mOptions.id}`);
+                // The board is reset and the clock below starts again, but the
+                // LMS is told nothing: loading a page changes no mark. The
+                // score moves only when the learner enters the code or the
+                // clock runs out, so the previous passed/failed stands until
+                // this retry produces an outcome of its own.
+                //
+                // padlock never raises `gameStarted`, so the report in
+                // addEvents is dropped by sendScoreNew, which needs a game that
+                // declares itself started or over. That is the intended silence
+                // here, not an oversight.
+            } else {
+                mOptions.candadoSolved = dataCandado.candadoSolved;
+                mOptions.counter = dataCandado.counter;
+                // Read from the stored payload, not from mOptions: saveCandadoData
+                // writes `candadoScore`, but nothing ever puts that key on the
+                // instance, so this always fell through to 0. A learner who had
+                // solved the padlock came back to a restored 0, and startGame's
+                // early path reports it — turning a passed page into a failed one.
+                mOptions.score = dataCandado.candadoScore
+                    ? dataCandado.candadoScore
+                    : 0;
+            }
+        }
+        $(window).on('pagehide.eXeCandado', function () {
+            const mOptions = $padlock.options[instance];
+            if (mOptions.candadoStarted) {
+                $padlock.saveCandadoData(instance);
+            }
+        });
+
+        $('#candadoMainContainer-' + instance)
+            .closest('.idevice_node')
+            .on('click', '.Games-SendScore', function () {
+                $padlock.sendScore(false, instance);
+            });
+
+        // Registering comes first: it is what resolves the node id from the
+        // DOM, and reportActivity drops any report that arrives without one.
+        // Both calls below report — the second through startGame, which shows
+        // the feedback straight away for a padlock restored as solved — so
+        // registering after them threw away the very mark being restored.
+        if (mOptions.isScorm > 0) {
+            $exeDevices.iDevice.gamification.scorm.registerActivity(mOptions);
+        }
+
+        if (mOptions.isScorm === 1) {
+            $padlock.sendScore(true, instance);
+        }
+
+        if (!mOptions.candadoShowMinimize) {
+            $padlock.startGame(instance);
+        }
+
+        setTimeout(() => {
+            $exeDevices.iDevice.gamification.report.updateEvaluationIcon(
+                mOptions,
+                this.isInExe
+            );
+        }, 500);
+    },
+
+    removeEvents: function (instance) {
+        $(`#candadoLinkMaximize-${instance}`).off('click');
+        $(`#candadoLinkMinimize-${instance}`).off('click');
+        $(`#candadoSolution-${instance}`).off('keydown');
+        $(`#candadoSolutionButton-${instance}`).off('click');
+        $(`#candadoShowIntro-${instance}`).off('click');
+        $(`#candadoShowRetro-${instance}`).off('click');
+        $(`#candadoSendScore`).off('click');
+
+        $(window).off('pagehide.eXeCandado');
+    },
+
+    startGame: function (instance) {
+        const mOptions = $padlock.options[instance];
+        mOptions.candadoStarted = true;
+
+        if (mOptions.candadoSolved && !mOptions.candadoReboot) {
+            // Paint the stored result, say nothing: this runs on page load and
+            // the learner has done nothing. The registry restored the mark from
+            // cmi.suspend_data already.
+            $padlock.showFeedback(instance, false);
+            return;
+        }
+
+        if (mOptions.candadoTime === 0) {
+            return;
+        }
+
+        $padlock.uptateTime(0, instance);
+
+        mOptions.counterClock = setInterval(() => {
+            let $node = $('#candadoMainContainer-' + instance);
+            let $content = $('#node-content');
+            if (
+                !$node.length ||
+                ($content.length && $content.attr('mode') === 'edition')
+            ) {
+                clearInterval(mOptions.counterClock);
+                return;
+            }
+            mOptions.counter--;
+
+            $padlock.uptateTime(mOptions.counter, instance);
+            if (mOptions.counter <= 0 || mOptions.candadoSolved) {
+                clearInterval(mOptions.counterClock);
+                $padlock.showFeedback(instance);
+            }
+        }, 1000);
+    },
+
+    /**
+     * @param {number} instance - Activity index.
+     * @param {boolean} [report] - Send the outcome to the LMS. Only the two
+     * callers that resolve the padlock do: the learner entering the code and
+     * the clock running out. Reopening an already solved padlock paints the
+     * same result on page load, and reporting there would write and commit a
+     * score nobody has just earned — merely visiting a page must not. Nothing
+     * is lost by staying quiet: the score it would resend is the one the
+     * activity registry has already restored from cmi.suspend_data.
+     */
+    showFeedback: function (instance, report = true) {
+        const mOptions = $padlock.options[instance];
+
+        // The padlock is resolved here and only here — its three callers are
+        // the solved code, the clock running out and reopening an already
+        // solved padlock. common.js derives completion from
+        // `gameOver === true || auto !== true`, and the report below is
+        // automatic, so without this flag a page carrying a padlock stays
+        // `incomplete` in the LMS even once the learner has opened it.
+        mOptions.gameOver = true;
+        // The mark is left alone: 10 when the padlock was opened, 0 when the
+        // clock ran out without it — right or wrong, nothing in between.
+        //
+        // Deliberately not derived from `candadoSolved`, which means "finished"
+        // rather than "opened": the timeout path raises it too, and a restored
+        // attempt reads it back, so a padlock that once timed out would come
+        // back scoring 10. The score itself is the honest record — the solve
+        // path sets it to 10 just before calling in, and a restored attempt
+        // brings back whatever was stored.
+
+        if (report && mOptions.isScorm > 0) {
+            $padlock.sendScore(true, instance);
+        }
+
+        $padlock.saveEvaluation(instance);
+        clearInterval(mOptions.counterClock);
+
+        mOptions.candadoSolved = true;
+
+        $padlock.uptateTime(mOptions.counter, instance);
+
+        $('#candadoInstructions-' + instance)
+            .hide()
+            .attr('aria-labelledby', 'candadoShowIntro-' + instance);
+        $('#candadoFeedRetro-' + instance)
+            .show()
+            .attr('aria-labelledby', 'candadoShowRetro-' + instance);
+        $('#candadoSolutionDiv-' + instance).hide();
+        $('#candadoNavigator-' + instance).show();
+        $('#candadoMessageInfo-' + instance).hide();
+        $('#candadoShowRetro-' + instance).focus();
+
+        const containerHtml = $('#candadoMainContainer-' + instance).html();
+        if ($exeDevices.iDevice.gamification.math.hasLatex(containerHtml)) {
+            $exeDevices.iDevice.gamification.math.updateLatex(
+                '#candadoMainContainer-' + instance
+            );
+        }
+    },
+
+    uptateTime: function (tiempo, instance) {
+        const adjustedTime = tiempo < 0 ? 0 : tiempo;
+        $('#candadoPTime-' + instance).text(
+            $exeDevices.iDevice.gamification.helpers.getTimeToString(
+                adjustedTime
+            )
+        );
+    },
+
+    getTimeToString: function (iTime) {
+        const mMinutes = parseInt(iTime / 60) % 60,
+            mSeconds = iTime % 60;
+        return `${mMinutes < 10 ? '0' + mMinutes : mMinutes}:${mSeconds < 10 ? '0' + mSeconds : mSeconds}`;
+    },
+
+    answerActivity: function (instance) {
+        const mOptions = $padlock.options[instance],
+            answord = $('#candadoSolution-' + instance)
+                .val()
+                .trim(),
+            msgs = mOptions.msgs;
+
+        let message = '',
+            typeMessage = 0;
+
+        if (answord.length === 0) {
+            $padlock.showMessage(1, msgs.msgEnterCode, instance);
+            return;
+        }
+
+        if ($padlock.checkWord(answord, mOptions.candadoSolution)) {
+            mOptions.score = 10;
+            $padlock.saveEvaluation(instance);
+            $padlock.showFeedback(instance);
+        } else {
+            message = `${$padlock.getRetroFeedMessages(false, instance)} ${msgs.msgErrorCode}`;
+            typeMessage = 1;
+            mOptions.candadoErrors++;
+            if (
+                mOptions.candadoAttemps > 0 &&
+                mOptions.candadoErrorMessage.length > 0 &&
+                mOptions.candadoErrors >= mOptions.candadoAttemps
+            ) {
+                typeMessage = 0;
+                message = mOptions.candadoErrorMessage;
+            }
+            $('#candadoSolution-' + instance).val('');
+        }
+
+        $padlock.showMessage(typeMessage, message, instance);
+    },
+
+    checkWord: function (answord, word) {
+        const normalize = (str) =>
+                str
+                    .trim()
+                    .replace(/\s+/g, ' ')
+                    .toUpperCase()
+                    .replace(/[.,;]$/, ''),
+            sWord = normalize(word),
+            sAnsWord = normalize(answord);
+
+        if (!sWord.includes('|')) {
+            return sWord === sAnsWord;
+        }
+
+        const words = sWord.split('|').map((w) => normalize(w));
+        return words.includes(sAnsWord);
+    },
+
+    getRetroFeedMessages: function (isCorrect, instance) {
+        const msgs = $padlock.options[instance].msgs,
+            messages = isCorrect ? msgs.msgSuccesses : msgs.msgFailures,
+            messagesArray = messages.split('|');
+        return messagesArray[Math.floor(Math.random() * messagesArray.length)];
+    },
+
+    showMessageAlert: function (tmsg) {
+        window.alert(tmsg);
+    },
+
+    showMessage: function (type, message, instance) {
+        const colors = {
+            0: '#555555',
+            1: $padlock.borderColors.red,
+            2: $padlock.borderColors.green,
+            3: $padlock.borderColors.blue,
+            4: $padlock.borderColors.yellow,
+        };
+
+        const color = colors[type];
+        $('#candadoPInformation-' + instance)
+            .text(message)
+            .css({
+                color: color,
+                'font-weight': 'bold',
+            });
+    },
+
+    saveEvaluation: function (instance) {
+        const mOptions = $padlock.options[instance];
+        // The same mark the LMS gets: 10 for a padlock opened with the right
+        // code, 0 for one the clock closed. A hardcoded 10 here made the local
+        // report and the LMS disagree about the very same attempt.
+        mOptions.scorerp = mOptions.score;
+        $exeDevices.iDevice.gamification.report.saveEvaluation(
+            mOptions,
+            $padlock.isInExe
+        );
+    },
+
+    sendScore: function (auto, instance) {
+        const mOptions = $padlock.options[instance];
+
+        mOptions.scorerp = mOptions.score;
+        mOptions.previousScore = $padlock.previousScore;
+        mOptions.userName = $padlock.userName;
+
+        $exeDevices.iDevice.gamification.scorm.sendScoreNew(auto, mOptions);
+
+        $padlock.previousScore = mOptions.previousScore;
+    },
+};
+$(function () {
+    $padlock.init();
+});
